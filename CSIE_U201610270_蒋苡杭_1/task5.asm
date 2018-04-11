@@ -1,0 +1,404 @@
+.386
+stack   segment use16   stack
+        db  500 dup(0)
+stack   ends
+data segment use16
+ctrl 	db  0ah, 0dh, '$'	;换行
+info1   db  'please input username:$'  
+info2   db  'please input password:$'  
+info3   db  'wrong username or password!Input again!$'
+info4   db  'enter the name of goods:$' 
+info5   db  'fail to find goods!$' 
+info6   db  'characters that are not a~z or A~Z are not allowed!$'
+info7   db  ':price should not be negtive$'
+info8	db	':imported goods should be more than sold goods$'
+in_name db  10
+		db  ?
+		db  10 dup(0)
+in_pwd  db  10
+		db  ?
+		db  10 dup(0)
+in_good db  10
+		db  ?
+		db  10 dup(0)
+bname	db	'yihang', 4 dup(0)		;字符串超过分配空间，十号调用会卡住	
+bpass	db	'test', 6 dup(0)	
+n		equ		3
+s1		db	'shop1', 0		
+ga1		db	'pen', 7 dup(0)	
+		dw	35, 56, 90, 80,?
+ga2		db	'book', 6 dup(0)	;
+		dw	15, 28, 45, 40,?
+ga3		db	'pencil', 4 dup(0)	
+		dw	8, 10, 102, 23,?
+;gan     db  n-2 dup('temp-value',15,0,20,0,30,0,2,0,?,?)
+s2		db	'shop2', 0		
+gb1		db	'book', 6 dup(0)	
+		dw	8, 36, 56, 46,?
+gb2		db	'pen', 7 dup(0)
+		dw	13, 23, 85, 40,?
+gb3		db	'pencil', 4 dup(0)	
+		dw	12, 13, 108, 15,?
+;gbn     db  n-2 dup('temp-value',15,0,20,0,30,0,2,0,?,?)
+auth    db  0	;身份证明变量，1为老板，0为客户
+num		db  0
+pro1	dd  0
+pro2	dd  0
+apr     dd  0
+data ends
+
+code 	segment		use16
+		assume		CS:code, DS:data, SS:stack
+start:	mov	ax, data
+		mov ds, ax
+		mov cx, 0
+		mov bp, 0
+;检查第一个商店数据的合理性
+		mov si, offset ga1
+		add si, 10
+goods1:	
+		mov ax, [si]      ;将进货价存入ax
+		cmp ax, 0
+		jl	warn3
+        mov ax, [si+2]    ;销售价存入ax
+		cmp ax, 0
+		jl  warn3
+		mov bx, [si+4]
+		mov ax, [si+6]
+		cmp bx, ax
+		jl  warn4
+		inc cx
+		add si, 20
+		cmp cx, n
+		jnz goods1
+		
+;检查第二个商店数据的合理性		
+		mov cx, 0
+		mov si, offset gb1
+		add si, 10
+goods2:	mov ax, [si]      ;将进货价存入ax
+		cmp ax, 0
+		jl	warn3
+        mov ax, [si+2]    ;进货总数存入ax
+		cmp ax, 0
+		jl  warn3
+		mov bx, [si+4]
+		mov ax, [si+6]
+		cmp bx, ax
+		jl  warn4
+		inc cx
+		add si, 20
+		cmp cx, n
+		jnz goods2
+		
+		mov cx, 0
+		mov bp, 0
+func1:	mov edx, 0		;006A
+		mov pro1, edx
+		mov pro2, edx
+		mov auth, dl
+		mov num, dl		;将num和auth初始化
+		lea dx, info1	;提示用户输入用户名
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		
+		lea dx, in_name
+		mov ah, 10
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		
+        mov cl, in_name+1	;获得字符串长度错误：cx的话变量类型不匹配
+		mov ch, 0 
+        cmp cx, 0			;用户只是输入了回车
+		jz  func3			
+		cmp BYTE PTR[in_name+2], 71H
+		jz	quit
+		mov di, 0			;用来比较姓名字符串时的计数
+		mov si, 0
+		jmp back
+			
+back:	lea dx, info2
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+
+		lea dx, in_pwd
+		mov ah, 10
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov di, 0
+		mov si, 0
+		mov cl, in_name+1
+		mov ch, 0
+		jmp func2
+	
+func2:  mov dl, [bname+di]	    ;变址寻址方式
+		mov bl, [di+in_name+2]	;直接寻址
+		cmp bl, 97
+		jl  char1
+		jmp char2
+back2:	cmp bl, dl
+		jnz warn1				;一个字符不同就进入提示部分
+		inc di
+		cmp cx, di				;cs0076
+		jnz	func2				;如果不为0，说明字符串还没比较完
+		;inc di
+		cmp BYTE PTR[bname+di], 0	;比较网点定义的下一个个字符是否为0
+		jnz warn1
+		
+		mov cl, in_pwd+1
+		mov ch, 0
+pass:	mov dl, [bpass+si]
+		mov bl, [si+in_pwd+2]
+		cmp bl, dl
+		jnz warn1
+		inc si
+		cmp cx, si					;直接寻址和立即寻址
+		jnz pass
+		;inc si
+		cmp BYTE PTR[bpass+si], 0	;比较最后是否为0
+		jnz	warn1
+		mov auth, 1
+		mov bx, 0
+		jmp func3	;00bc
+		
+warn1:	lea dx, info3	;提示登录失败
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		jmp func1
+		
+func3:	lea dx, info4	;0147
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		lea dx, in_good	;输入待查找的商品名称00cd
+        mov ah, 10
+        int 21h
+		jmp lopa;0180
+
+lopa:	mov	si, offset ga1	    ;在第一个网店寻找查询的商品名称
+		mov bp, 0				;存储查找过的商品数目
+		mov dl, in_good+1		;存放输入的商品名称的长度
+		mov dh, 0
+		mov WORD PTR bx, 0
+		jmp cmp1
+		
+lopa2:  mov si, offset gb1		;在第二个网店寻找查询的商品名称
+		mov bp, 0
+		mov dl, in_good+1
+		mov dh, 0
+		mov WORD PTR bx, 0
+		jmp cmp1				
+	
+cmp1:	cmp dx, 0			;只输入回车，回到功能1   0180
+		jz  func1
+		mov cl, [si+bx]
+		mov ch, 0
+		mov al, BYTE PTR [bx+in_good+2]	;010B
+		mov ah, 0
+		cmp cx, ax
+		jnz cmp2
+		inc bx
+		cmp bx, dx			;dx存放输入的商品名称的长度
+		jnz cmp1			;有两个条件，一方面要比完，另一方面要auth为1
+		cmp BYTE PTR[si+bx], 0	;比较最后是否为0
+		jnz cmp2
+		cmp auth, 1			
+		jz	part33			
+		jmp part34
+part33:		;01AC
+		add si, 10
+		mov ax, [si+6]    ;已售数量
+        cwde
+        mov ecx, eax	  ;已售数量存入ecx  
+        mov ax, [si+2]	  ;销售价
+        cwde
+        imul ecx, eax     ;销售价*已售数量
+		imul ecx, 100
+        mov ax, [si]      ;将进货价存入ax
+        cwde			  ;扩展ax内的数据为32位
+        mov ebx, eax      ;将进货价存入ebx中
+        mov ax, [si+4]    ;进货总数存入ax
+        cwde
+        imul ebx, eax     ;进货价*进货总数
+
+		cdq
+		mov eax, ecx	;为除法做准备
+        idiv ebx     	;算出利润放入eax中
+        sub eax ,100	;简化运算过程
+        mov ebx, eax     
+        cmp num, 0      ;如果当前只算了一个店的商品就返回再算第二个网店
+		jz  skip1
+		cmp num, 1
+		jz  skip2
+skip1:  inc num
+		mov pro1, eax
+		jmp lopa2
+skip2:  mov pro2, eax
+		jmp func4
+part34:	 	;0202
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov dl, in_good+1
+		mov dh, 0
+		mov BYTE PTR[in_good+bx+2], '$' ;补上$符号，便于输出
+		mov ch, in_good+1				;保存置0的部分
+		mov cl, in_good
+		mov WORD PTR in_good, 0			;暂时置0，以免输出乱码
+		lea dx, in_good+2
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov in_good+1, ch
+		mov in_good, cl
+		jmp  func1
+
+quit:	mov cl, in_name+1	;只有一个字符的情况下说明输入的就是q
+		cmp cl, 1
+		jz 	end1
+		jmp back
+end1:   mov ah,4ch
+        int 21h
+cmp2:   add si, 20
+		inc bp
+		cmp bp, n
+		jz  quit2
+		mov bx, 0
+		jmp cmp1
+quit2:	lea dx , info5
+        mov ah , 9
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov bx, 0
+        jmp func3
+		
+func4:  mov eax,pro1	;商品1的利润
+		add eax,pro2	;商品2的利润
+		cdq				;注意扩充
+		mov ebx, 2
+		idiv ebx
+		mov ecx, eax	;保存eax，一定要注意
+		mov ebx, edx
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov eax, ecx
+		mov edx, ebx
+		cmp eax, 90
+        jnl grade1    
+        cmp eax, 50
+        jnl grade2    
+        cmp eax, 20
+        jnl grade3    
+        cmp eax, 0
+        jnl grade4    
+		jmp grade5
+		
+grade1: mov dl, 'A'
+        mov ah,  2
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+        jmp func1
+grade2: mov dl, 'B'
+        mov ah, 2
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+        jmp func1
+grade3: mov dl ,'C'
+        mov ah ,2
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h		
+        jmp func1
+grade4: mov dl, 'D'
+        mov ah, 2
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+        jmp func1
+grade5: mov dl, 'F'
+        mov ah, 2
+        int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+        jmp func1
+;判断输入姓名的合法性		
+char1:  cmp	bl, 90
+		jg	warn2
+		cmp	bl, 65
+		jl  warn2
+		jmp back2
+char2:  cmp	bl, 122
+		jg  warn2
+		jmp back2
+warn2:  lea dx, info6
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		jmp func1
+		
+ewarn3: inc bp
+		jmp fwarn3
+warn3:	sub si, 10
+fwarn3:	cmp BYTE PTR[si+ds:[bp]], 0	
+		jnz ewarn3
+		mov BYTE PTR[si+ds:[bp]], '$'
+		lea dx, [si]
+		mov ah, 9
+		int 21h
+		lea dx, info7
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov BYTE PTR[si+ds:[bp]], 0		;恢复原状
+		jmp end1
+		
+ewarn4: inc bp
+		jmp fwarn4
+warn4:	sub si, 10
+fwarn4:	cmp BYTE PTR[si+ds:[bp]], 0
+		jnz ewarn4
+		mov BYTE PTR[si+ds:[bp]], '$'
+		lea dx, [si]
+		mov ah, 9
+		int 21h
+		lea dx, info8
+		mov ah, 9
+		int 21h
+		lea dx, ctrl
+		mov ah, 9
+		int 21h
+		mov BYTE PTR[si+ds:[bp]], 0   ;恢复原状
+		jmp end1
+code	ends
+		end	start
